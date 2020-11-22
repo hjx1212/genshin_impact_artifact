@@ -242,7 +242,7 @@ def parse_content(content):
     target = {"dungeon": None, "suit": None, "slot": None, "main_attr": None}
     while content:
         ok = False
-        for i in range(min(len(i), keyword_max_len), 0, -1):
+        for i in range(min(len(content), keyword_max_len), 0, -1):
             ret = keywords.get(content[:i])
             if ret:
                 for k, v in ret.items():
@@ -279,7 +279,7 @@ async def genshin_artifact(bot, ev):
     try:
         target = parse_content(ev.message.extract_plain_text())
     except Exception as e:
-        await bot.send(ev, e)
+        await bot.send(ev, str(e))
         return
     target_dungeon = dungeon[target["dungeon"]] if target["dungeon"] else None
     times = 0
