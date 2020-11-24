@@ -342,19 +342,19 @@ async def genshin_artifact(bot, ev):
         break
     msg = f'刷取{target_dungeon[0]}圣遗物{times + 1}次，'
     if not ok:
-        msg += '还是没有获得指定圣遗物，你脸也太黑了吧，拿着这个，凑合着用吧：\n'
+        msg += '还是没有获得指定圣遗物，你脸也太黑了吧，拿着这个，凑合着用吧：'
     else:
-        msg += '获得：\n'
+        msg += '获得：'
     try:
         msg += print_artifact_img_CQ(artifact)
     except:
-        msg += print_artifact(artifact)
+        msg += '\n' + print_artifact(artifact) + '\n'
     if AUTO_ENHANCE:
-        msg += f'\n\n{enhance(artifact)}\n'
+        msg += '\n' + enhance(artifact)
         try:
             msg += print_artifact_img_CQ(artifact)
         except:
-            msg += print_artifact(artifact)
+            msg += '\n' + print_artifact(artifact)
     await bot.send(ev, msg, at_sender=True)
 
 
