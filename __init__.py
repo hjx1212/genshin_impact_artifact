@@ -1,4 +1,8 @@
+import os
+import base64
+from io import BytesIO
 from random import randrange, choice, choices, random
+from PIL import Image, ImageFont, ImageDraw, ImageMath
 
 from hoshino import Service
 sv = Service('原神圣遗物')
@@ -102,7 +106,7 @@ attrs = [
      ("暴击", "暴率", "暴")),
     # 9
     ("暴击伤害", .093, .622, (.054, .062, .070, .078),
-     ("暴伤", )),
+     ("暴伤",)),
     # 10
     ("物理伤害加成", .087, .583, None,
      ("物理", "物", "物伤")),
@@ -133,11 +137,11 @@ available_main_attrs = [(0,), (2,), (1, 3, 5, 6, 7), (1, 3, 5, 6, 10, 11, 12, 13
 available_sub_attrs = [(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)] * 5
 
 max_attr = 4
-attr_rate = (1., 1., 1., .25, .0)
+attr_rate = (1., 1., 1., .2, .0)
 sub_attr_value_weight = (10, 35, 35, 20)
 
 dungeon = [
-    ("精英级怪物,BOSS级怪物", (3, 5),    # 角斗士的终幕礼, 流浪大地的乐团
+    ("精英级怪物,BOSS级怪物", (3, 5),  # 角斗士的终幕礼, 流浪大地的乐团
      ("精英", "BOSS", "无相", "龙", "狼")),
     ("无妄引咎密宫：祝圣秘境：寒霜", (1, 7),  # 渡过烈火的贤人, 炽烈的炎之魔女
      ("无妄引咎密宫", "寒霜", "火本")),
@@ -147,9 +151,9 @@ dungeon = [
      ("孤云凌霄之处", "惊蛰", "岩本")),
     ("铭记之谷：祝圣秘境：钢铁之舞", (2, 4),  # 被怜爱的少女, 翠绿之影
      ("铭记之谷", "钢铁之舞", "风本", "少女本", "治疗本")),
-    ("华池岩岫：祝圣秘境：岩牢", (9, 8),    # 染血的骑士道, 昔日宗室之仪
+    ("华池岩岫：祝圣秘境：岩牢", (9, 8),  # 染血的骑士道, 昔日宗室之仪
      ("华池岩岫", "岩牢", "物理本")),
-    ("???????????????", (12, 13),    # 征服寒冬的勇士, 冰之川与雪之砂
+    ("???????????????", (12, 13),  # 征服寒冬的勇士, 冰之川与雪之砂
      ("冰本",))
 ]
 
@@ -172,6 +176,10 @@ for i, v in enumerate(attrs):
 for i, v in enumerate(dungeon):
     for vv in v[-1]:
         keywords[vv] = {"dungeon": i}
+
+RES_PATH = os.path.join(os.path.dirname(__file__), 'res')
+background = Image.open(os.path.join(RES_PATH, 'background.png'))
+ttf_path = os.path.join(RES_PATH, "zh-cn.ttf")
 
 
 def enhance_sub_attr(artifact):
@@ -237,6 +245,45 @@ def print_artifact(artifact):
     return ret
 
 
+def get_artifact_image(artifact):
+    # 获取圣遗物图片，会返回一个image
+
+    img = background.copy()
+
+    name = suit[artifact["suit"]][1][artifact["slot"]]
+    icon = Image.open(os.path.join(RES_PATH, name + '.png'))
+    icon = icon.resize((190, 190))
+    # icon_a = icon.getchannel("A")  # 有的图alpha通道有问题，需要对alpha处理一下
+    # icon_a = ImageMath.eval("convert(a*b/256, 'L')", a=icon_a, b=icon_a)
+    img.paste(icon, (218, 48), icon)
+
+    draw = ImageDraw.Draw(img)
+    draw.text((24, 8), name, fill="#ffffff", font=ImageFont.truetype(ttf_path, size=28))
+    draw.text((24, 59), slot[artifact["slot"]][0], fill="#ffffff", font=ImageFont.truetype(ttf_path, size=17))
+    attr = artifact["main_attr"]
+    draw.text((24, 128), attrs[attr["id"]][0], fill="#bfafa8", font=ImageFont.truetype(ttf_path, size=17))
+    draw.text((24, 148), f'{attr["value"]:{"d" if isinstance(attr["value"], int) else ".1%"}}',
+              fill="#ffffff", font=ImageFont.truetype(ttf_path, size=35))
+    level = f'+{artifact["level"]}'
+    w, h = draw.textsize(level, font=ImageFont.truetype(ttf_path, size=20))
+    draw.text((50 - w / 2, 269 - h / 2), level, fill="#ffffff", font=ImageFont.truetype(ttf_path, size=20))
+    x = 24
+    y = 300
+    for attr in artifact["sub_attr"]:
+        draw.text((x, y), f'·{attrs[attr["id"]][0]}+{attr["value"]:{"d" if isinstance(attr["value"], int) else ".1%"}}',
+                  fill="#495366", font=ImageFont.truetype(ttf_path, size=20))
+        y += 32
+
+    return img
+
+
+def print_artifact_img_CQ(artifact):
+    img = get_artifact_image(artifact)
+    buf = BytesIO()
+    img.save(buf, format='PNG')
+    return f"[CQ:image,file=base64://{base64.b64encode(buf.getvalue()).decode()}]"
+
+
 def parse_content(content):
     content = content.strip()
     target = {"dungeon": None, "suit": None, "slot": None, "main_attr": None}
@@ -267,7 +314,7 @@ def parse_content(content):
             raise ValueError(f'圣遗物套装与所刷取的秘境不符')
     if target["slot"] and target["main_attr"]:
         if target["slot"] in (0, 1):
-            target["main_attr"] -= 1    # trick...
+            target["main_attr"] -= 1  # trick...
         if target["main_attr"] not in available_main_attrs[target["slot"]]:
             raise ValueError(f'圣遗物位置的主属性不符')
 
@@ -281,22 +328,33 @@ async def genshin_artifact(bot, ev):
     except Exception as e:
         await bot.send(ev, str(e))
         return
-    target_dungeon = dungeon[target["dungeon"]] if target["dungeon"] else None
-    times = 0
-    while True:
-        artifact = get_rand_artifact(target_dungeon[1] if target_dungeon else None)
-        times += 1
+    target_dungeon = dungeon[target["dungeon"]] if target["dungeon"] else ("", None)
+    ok = False
+    for times in range(10000):
+        artifact = get_rand_artifact(target_dungeon[1])
         if target["suit"] and target["suit"] != artifact["suit"]:
             continue
         if target["slot"] and target["slot"] != artifact["slot"]:
             continue
         if target["main_attr"] and target["main_attr"] != artifact["main_attr"]["id"]:
             continue
+        ok = True
         break
-    msg = f'刷取{target_dungeon[0] if target_dungeon else ""}圣遗物{times}次，获得:\n{print_artifact(artifact)}'
+    msg = f'刷取{target_dungeon[0]}圣遗物{times + 1}次，'
+    if not ok:
+        msg += '还是没有获得指定圣遗物，你脸也太黑了吧，拿着这个，凑合着用吧：\n'
+    else:
+        msg += '获得：\n'
+    try:
+        msg += print_artifact_img_CQ(artifact)
+    except:
+        msg += print_artifact(artifact)
     if AUTO_ENHANCE:
         msg += f'\n\n{enhance(artifact)}\n'
-        msg += print_artifact(artifact)
+        try:
+            msg += print_artifact_img_CQ(artifact)
+        except:
+            msg += print_artifact(artifact)
     await bot.send(ev, msg, at_sender=True)
 
 
@@ -311,4 +369,9 @@ if __name__ == '__main__':
     enhance(test)
     print(print_artifact(test))
 
-    print(print_artifact(get_rand_artifact()))
+    test = get_rand_artifact()
+    print(print_artifact(test))
+    enhance(test)
+    img = get_artifact_image(test)
+    img.show()
+    # img.save('out/'+suit[i][1][j]+'_v2.png', 'png')
