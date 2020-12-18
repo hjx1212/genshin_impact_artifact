@@ -11,6 +11,7 @@ from hoshino import Service
 sv = Service('原神圣遗物')
 
 AUTO_ENHANCE = True
+CONTENT_SUB_ATTR_PREFIX = "副"
 
 for v in slot.values():
     v["main"] = [k for k, c in v["main_weight"].items() for _ in range(c)]
@@ -29,9 +30,15 @@ for k, v in slot.items():
     for vv in v["alias"]:
         keywords[vv] = {"slot": k}
 for k, v in attrs.items():
-    keywords[k] = {"main_attr": k}
+    if keywords.get(k, {}).get("main_attr"):
+        keywords[k]["main_attr"].add(k)
+    else:
+        keywords[k] = {"main_attr": {k}}
     for vv in v["alias"]:
-        keywords[vv] = {"main_attr": k}
+        if keywords.get(vv, {}).get("main_attr"):
+            keywords[vv]["main_attr"].add(k)
+        else:
+            keywords[vv] = {"main_attr": {k}}
 for k, v in dungeon.items():
     for vv in v["alias"]:
         keywords[vv] = {"dungeon": k}
@@ -150,21 +157,36 @@ def print_artifact_img_CQ(artifact):
 
 def parse_content(content):
     content = content.strip()
-    target = {"dungeon": None, "suit": None, "slot": None, "main_attr": None}
+    target = {"dungeon": None, "suit": None, "slot": None, "main_attr": None, "sub_attr": []}
+    is_sub_attr = False
     while content:
+        if CONTENT_SUB_ATTR_PREFIX and not is_sub_attr and len(content) > len(CONTENT_SUB_ATTR_PREFIX) and \
+                content.startswith(CONTENT_SUB_ATTR_PREFIX):
+            if len(target["sub_attr"]) >= max_attr:
+                raise ValueError(f'副词条最多只能有{max_attr}个: {content}')
+            is_sub_attr = True
+            content = content[len(CONTENT_SUB_ATTR_PREFIX):]
+            continue
         ok = False
         for i in range(min(len(content), keyword_max_len), 0, -1):
             ret = keywords.get(content[:i])
             if ret:
-                for k, v in ret.items():
-                    if target.get(k):
-                        raise ValueError(f'重复关键词: {content[:i]}')
-                    target[k] = v
-                content = content[i:].strip()
-                ok = True
-                break
+                if is_sub_attr:
+                    if ret.get("main_attr"):
+                        target["sub_attr"].append(ret["main_attr"])
+                        ok = True
+                        is_sub_attr = False
+                else:
+                    for k, v in ret.items():
+                        if target.get(k):
+                            raise ValueError(f'重复关键词: {content[:i]}')
+                        target[k] = v
+                    ok = True
+                if ok:
+                    content = content[i:].strip()
+                    break
         if not ok:
-            raise ValueError(f'没有找到关键词: {content}')
+            raise ValueError(f'没有找到关键词: {CONTENT_SUB_ATTR_PREFIX if is_sub_attr else ""}{content}')
 
     if target["suit"]:
         dungeon_name = None
@@ -177,15 +199,27 @@ def parse_content(content):
         elif target["dungeon"] != dungeon_name:
             raise ValueError(f'圣遗物套装与所刷取的秘境不符')
     if target["slot"] and target["main_attr"]:
-        if target["slot"] in ("生之花", "死之羽") and len(target["main_attr"]) > 3:
-            target["main_attr"] = target["main_attr"][:-3]  # trick...
-        if target["main_attr"] not in slot[target["slot"]]["main"]:
+        if not target["main_attr"].intersection(set(slot[target["slot"]]["main"])):
             raise ValueError(f'圣遗物位置的主属性不符')
 
     return target
 
 
-def get_target_artifact(target, max_times=10000):
+def check_sub_attr(target, subs, target_idx=0, used_sub=0):
+    if len(target) > len(subs):
+        return False
+    if target_idx >= len(target):
+        return True
+    for sub_idx, sub in enumerate(subs):
+        if used_sub & 1 << sub_idx:
+            continue
+        if sub["name"] in target[target_idx]:
+            if check_sub_attr(target, subs, target_idx + 1, used_sub | 1 << sub_idx):
+                return True
+    return False
+
+
+def get_target_artifact(target, max_times=1000000):
     ok = False
     for times in range(max(max_times, 1)):
         artifact = get_rand_artifact(dungeon[target["dungeon"]]["reward"] if target["dungeon"] else None)
@@ -193,13 +227,15 @@ def get_target_artifact(target, max_times=10000):
             continue
         if target["slot"] and target["slot"] != artifact["slot"]:
             continue
-        if target["main_attr"] and target["main_attr"] != artifact["main_attr"]["name"]:
+        if target["main_attr"] and artifact["main_attr"]["name"] not in target["main_attr"]:
+            continue
+        if target["sub_attr"] and not check_sub_attr(target["sub_attr"], artifact["sub_attr"]):
             continue
         ok = True
         break
     msg = f'刷取{target["dungeon"] if target["dungeon"] else ""}圣遗物{times + 1}次，'
     if not ok:
-        msg += '还是没有获得指定圣遗物，你脸也太黑了吧，拿着这个，凑合着用吧：\n'
+        msg += '还是没有获得指定圣遗物，做人要知足，拿着这个，凑合着用吧：\n'
     else:
         msg += '获得：\n'
     return artifact, msg
@@ -240,7 +276,7 @@ if __name__ == '__main__':
     test = get_rand_artifact()
     print(print_artifact(test))
 
-    target = parse_content("魔女火伤杯")
+    target = parse_content("魔女火伤杯副攻副攻副暴副暴")
     print(target)
     test, msg = get_target_artifact(target)
     print(msg)
