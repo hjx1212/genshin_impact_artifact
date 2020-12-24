@@ -129,7 +129,7 @@ def get_artifact_image(artifact):
     # icon = icon.resize((190, 190))
     # icon_a = icon.getchannel("A")  # 有的图alpha通道有问题，需要对alpha处理一下
     # icon_a = ImageMath.eval("convert(a*b/256, 'L')", a=icon_a, b=icon_a)
-    img.paste(icon, (292, 64), icon)
+    img.paste(icon, (420 - icon.width // 2, 192 - icon.height // 2), icon)
 
     draw = ImageDraw.Draw(img)
     draw.text((32, 10), name, fill="#ffffff", font=ImageFont.truetype(ttf_path, size=37))
@@ -139,7 +139,7 @@ def get_artifact_image(artifact):
     draw.text((32, 198), print_value(attr["value"]), fill="#ffffff", font=ImageFont.truetype(ttf_path, size=47))
     level = f'+{artifact["level"]}'
     w, h = draw.textsize(level, font=ImageFont.truetype(ttf_path, size=27))
-    draw.text((64 - w / 2, 360 - h / 2), level, fill="#ffffff", font=ImageFont.truetype(ttf_path, size=27))
+    draw.text((64 - w // 2, 360 - h // 2), level, fill="#ffffff", font=ImageFont.truetype(ttf_path, size=27))
     x, y = 32, 401
     for attr in artifact["sub_attr"]:
         draw.text((x, y), f'·{print_attr(attr)}', fill="#495366", font=ImageFont.truetype(ttf_path, size=27))
